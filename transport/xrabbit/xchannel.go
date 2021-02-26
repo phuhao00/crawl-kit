@@ -7,31 +7,28 @@ import (
 )
 
 type XChannel struct {
-	Publisher 	*Publisher
 	channel       *amqp.Channel
 	IsConsumeInit bool
 	queueName     string
 }
 
-func NewXChannel(
-	ch Channel,
-	q *amqp.Queue,
-	enc EncodeRequestFunc,
-	dec DecodeResponseFunc,
-	options ...PublisherOption,
-	) *XChannel {
+func NewXChannel(ch*amqp.Channel,queueName string) *XChannel {
 	return &XChannel{
-		Publisher: NewPublisher(
-			ch,q,enc,dec,options...
-			),
-		channel:       nil,
+		channel:       ch,
 		IsConsumeInit: false,
-		queueName:     "",
+		queueName:     queueName,
 	}
 }
 
-func (c *XChannel) Publish(ctx context.Context, Publishing amqp.Publishing) error {
-	if err := c.channel.Publish(
+func (c XChannel) Publish(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error {
+	return c.channel.Publish(exchange,key,mandatory,immediate,msg)
+}
+func (c XChannel)Consume(queue, consumer string, autoAck, exclusive, noLocal, noWail bool, args amqp.Table) (<-chan amqp.Delivery, error){
+	return c.channel.Consume(queue,consumer,autoAck,exclusive,noLocal,noWail,args)
+}
+
+func (c *XChannel) PublishEntrance(ctx context.Context, Publishing amqp.Publishing) error {
+	if err := c.Publish(
 		getPublishExchange(ctx), // exchange
 		getPublishKey(ctx),      // routing key
 		false,                   // mandatory
@@ -69,15 +66,15 @@ func (c *XChannel) InitConsumeChannel(ctx context.Context) error {
 	return err
 }
 
-func (c *XChannel) Consume(ctx context.Context) (*amqp.Delivery, error) {
+func (c *XChannel) ConsumeEntrance(ctx context.Context) (*amqp.Delivery, error) {
 	if !c.IsConsumeInit {
 		return nil, errors.New("channel for Consume  not init ")
 	}
 	autoAck := getConsumeAutoAck(ctx)
 
-	msg, err := c.channel.Consume(
-		c.Publisher.q.Name,
-		"", //consumer
+	msg, err := c.Consume(
+		c.queueName,
+		getConsumerName(ctx), //consumer
 		autoAck,
 		false, //exclusive
 		false, //noLocal
@@ -102,4 +99,20 @@ func (c *XChannel) Consume(ctx context.Context) (*amqp.Delivery, error) {
 			return nil, ctx.Err()
 		}
 	}
+}
+
+func (c *XChannel)XChannelPubDeliver(ctx context.Context,
+	p Publisher,
+	pub *amqp.Publishing) (*amqp.Delivery, error)  {
+	err := c.PublishEntrance(
+		ctx,
+		*pub,
+	)
+	return nil, err
+}
+
+func (c *XChannel)XChannelConDeliver(ctx context.Context,
+	p Publisher,
+	pub *amqp.Publishing) (*amqp.Delivery, error)  {
+	return  c.ConsumeEntrance(ctx)
 }

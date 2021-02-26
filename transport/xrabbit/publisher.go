@@ -93,10 +93,13 @@ func (p Publisher) Endpoint() endpoint.Endpoint {
 		}
 
 		deliv, err := p.deliverer(ctx, p, &pub)
+
 		if err != nil {
 			return nil, err
 		}
-
+		if deliv==nil {
+			return nil, nil
+		}
 		for _, f := range p.after {
 			ctx = f(ctx, deliv)
 		}
